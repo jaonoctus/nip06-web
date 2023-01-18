@@ -38,7 +38,7 @@ const privateKeyInput = computed(() => {
   if (isHexFormat.value) {
     return privateKeyHex.value
   }
-  const { bech32PrivateKey } = getBech32PrivateKey({ privateKey: publicKeyHex.value })
+  const { bech32PrivateKey } = getBech32PrivateKey({ privateKey: privateKeyHex.value })
   return bech32PrivateKey
 })
 
