@@ -10,7 +10,6 @@
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "6.2.0",
-    "inline-scripts": "1.7.4",
     "nuxt": "3.0.0"
   },
   "dependencies": {
