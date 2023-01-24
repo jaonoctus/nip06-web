@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {
   generateSeedWords,
   validateWords,
@@ -9,7 +9,7 @@ import {
 } from 'nip06'
 
 const passphrase = ref('')
-const seedWords = ref([])
+const seedWords = ref<{ word: string }[]>([])
 const isHexFormat = ref(true)
 
 const mnemonic = computed(() => seedWords.value.map(({ word }) => word).join(' ').trim())
@@ -61,16 +61,27 @@ function resetForm() {
   passphrase.value = ''
 }
 
-function generateRandomMnemonic() {
-  const { mnemonic: randomMnemonic } = generateSeedWords()
-
-  randomMnemonic.split(' ').forEach((word, index) => {
+function fillMnemonic({ newMnemonic }: { newMnemonic: string }) {
+  newMnemonic.split(' ').forEach((word, index) => {
     seedWords.value[index].word = word
   })
 }
 
+function generateRandomMnemonic() {
+  const { mnemonic: newMnemonic } = generateSeedWords()
+  fillMnemonic({ newMnemonic })
+}
+
 function toggleFormat() {
   isHexFormat.value = !isHexFormat.value
+}
+
+function onPasteSeed(event: ClipboardEvent) {
+  const newMnemonic = event.clipboardData?.getData('text')
+
+  if (newMnemonic) {
+    fillMnemonic({ newMnemonic })
+  }
 }
 
 onBeforeMount(() => {
@@ -118,6 +129,7 @@ onBeforeMount(() => {
                         {{ n+1 }}
                       </span>
                       <input
+                        @paste.prevent="onPasteSeed"
                         v-model="word.word"
                         :name="`word-${n+1}`"
                         :id="`word-${n+1}`"
