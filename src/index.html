@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NIP-06 | Nostr Basic key derivation from mnemonic seed phrase</title>
+  <script src="./assets/vue.global.js"></script>
+  <script src="./assets/nostr-tools.js"></script>
+  <link rel="stylesheet" href="./assets/bulma.min.css" />
+</head>
+<body>
+  <div id="app">
+    <nav class="navbar" role="navigation" aria-label="main navigation">
+      <div class="navbar-brand">
+        <span class="navbar-item">
+          NIP-06
+        </span>
+      </div>
+
+      <div class="navbar-menu">
+        <div class="navbar-start">
+          <span class="navbar-item">
+            Basic key derivation from mnemonic seed phrase
+          </span>
+        </div>
+      </div>
+    </nav>
+
+    <section class="hero is-light is-fullheight-with-navbar">
+      <div class="hero-body">
+        <div class="container">
+          <div class="columns">
+            <div class="column">
+              <p class="block has-text-centered">
+                You can enter an existing <a href="https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki" target="_blank" class="has-text-link">BIP39 mnemonic</a>, or generate a new random one.
+              </p>
+              <form action="">
+                <div class="buttons has-addons is-centered">
+                  <button
+                    @click.prevent="generateRandomMnemonic"
+                    type="button"
+                    class="button"
+                  >
+                    generate random mnemonic
+                  </button>
+
+                  <button
+                    v-if="isFilled"
+                    @click.prevent="resetForm"
+                    type="button"
+                    class="button"
+                  >
+                    reset
+                  </button>
+                </div>
+
+                <div
+                  v-for="(mnemonic, index) in mnemonicWords"
+                  :key="`word-${index + 1}`"
+                  class="field"
+                >
+                  <div class="control has-icons-left has-icons-right">
+                    <input v-model="mnemonic.word" class="input" type="text" />
+                    <span class="icon is-small is-left"> {{ index + 1 }} </span>
+                  </div>
+                </div>
+                <div class="field">
+                  <div class="control has-icons-left has-icons-right">
+                    <input v-model="passphrase" class="input" type="text" placeholder="Passphrase" />
+                  </div>
+                </div>
+              </form>
+            </div>
+            <div class="column">
+              <div v-if="isFilled && isMnemonicValid">
+                <div class="buttons has-addons is-centered">
+                  <button
+                    @click.prevent="toggleFormat"
+                    :class="{ 'is-info': isHexFormat }"
+                    class="button"
+                  >
+                    hex format
+                  </button>
+                  <button
+                    @click.prevent="toggleFormat"
+                    :class="{ 'is-info': !isHexFormat }"
+                    class="button"
+                  >
+                    bech32 format
+                  </button>
+                </div>
+                <div v-if="isHexFormat" class="field">
+                  <label class="label">hex private key</label>
+                  <div class="control">
+                    <input v-model="privateKeyHex" readonly class="input" type="text" />
+                  </div>
+                </div>
+                <div v-if="isHexFormat" class="field">
+                  <label class="label">hex public key</label>
+                  <div class="control">
+                    <input v-model="publicKeyHex" readonly class="input" type="text" />
+                  </div>
+                </div>
+                <div v-if="!isHexFormat" class="field">
+                  <label class="label">bech32 private key</label>
+                  <div class="control">
+                    <input v-model="privateKeyBech32" readonly class="input" type="text" />
+                  </div>
+                </div>
+                <div v-if="!isHexFormat" class="field">
+                  <label class="label">bech32 public key</label>
+                  <div class="control">
+                    <input v-model="publicKeyBech32" readonly class="input" type="text" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="content has-text-centered">
+        <p>
+          <strong>v2.0.0</strong> | made by <a href="https://github.com/jaonoctus/nip06-web" target="_blank" class="has-text-weight-semibold">jaonoctus</a> with <a href="https://vuejs.org" target="_blank">Vue.js</a>, <a href="https://bulma.io" target="_blank">Bulma</a>, <a href="https://github.com/nbd-wtf/nostr-tools" target="_blank">nostr-tools</a> and <span class="has-text-danger has-text-weight-semibold">love</span>
+        </p>
+        <p>You can <a href="https://github.com/jaonoctus/nip06-web/releases" target="_blank">download the nip06-standalone.html</a> offline version from the latest GitHub release</p>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const { createApp } = Vue
+    const { nip06, nip19, getPublicKey } = NostrTools
+
+    createApp({
+      data() {
+        return {
+          mnemonicSize: 12,
+          mnemonicWords: [],
+          passphrase: '',
+          isHexFormat: true
+        }
+      },
+      computed: {
+        mnemonic () {
+          return this.mnemonicWords.map(({ word }) => `${word}`.trim()).join(' ').trim()
+        },
+        isMnemonicValid () {
+          return nip06.validateWords(this.mnemonic)
+        },
+        isFilled () {
+          return this.mnemonic.length > 0
+        },
+        privateKeyHex () {
+          if (!this.isMnemonicValid) {
+            return ''
+          }
+          return nip06.privateKeyFromSeedWords(this.mnemonic, this.passphrase)
+        },
+        publicKeyHex () {
+          if (!this.isMnemonicValid) {
+            return ''
+          }
+          return getPublicKey(this.privateKeyHex)
+        },
+        privateKeyBech32 () {
+          if (!this.isMnemonicValid) {
+            return ''
+          }
+          return nip19.nsecEncode(this.privateKeyHex)
+        },
+        publicKeyBech32 () {
+          if (!this.isMnemonicValid) {
+            return ''
+          }
+          return nip19.npubEncode(this.publicKeyHex)
+        }
+      },
+      created() {
+        this.resetForm()
+      },
+      methods: {
+        toggleFormat () {
+          this.isHexFormat = !this.isHexFormat
+        },
+        generateRandomMnemonic () {
+          const randomMnemonic = nip06.generateSeedWords()
+          console.log(randomMnemonic)
+          this.fillMnemonic(randomMnemonic)
+        },
+        resetForm () {
+          this.mnemonicWords = []
+          for(let i = 0; i < this.mnemonicSize; i++) {
+            this.mnemonicWords.push({ word: '' })
+          }
+          this.passphrase = ''
+        },
+        fillMnemonic (mnemonic) {
+          mnemonic.split(' ').forEach((word, index) => {
+            this.mnemonicWords[index].word = word
+          })
+        },
+      }
+    }).mount('#app')
+  </script>
+</body>
+</html>
