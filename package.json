@@ -1,19 +1,24 @@
 {
-  "private": true,
-  "version": "1.1.1",
+  "name": "nip06-web",
+  "version": "2.0.0",
+  "description": "Basic key derivation from mnemonic seed phrase",
   "scripts": {
-    "build": "nuxt build",
-    "dev": "nuxt dev",
-    "generate": "nuxt generate",
-    "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "dev": "live-server src",
+    "preview": "live-server dist",
+    "build": "node build.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jaonoctus/nip06-web.git"
+  },
+  "author": "jaonoctus <jaonoctus@protonmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jaonoctus/nip06-web/issues"
+  },
+  "homepage": "https://github.com/jaonoctus/nip06-web#readme",
   "devDependencies": {
-    "@nuxtjs/tailwindcss": "6.2.0",
-    "nuxt": "3.0.0"
-  },
-  "dependencies": {
-    "@tailwindcss/forms": "0.5.3",
-    "nip06": "1.0.2"
+    "live-server": "1.2.2"
   }
 }
