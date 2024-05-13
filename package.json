@@ -1,24 +1,30 @@
 {
   "name": "nip06-web",
-  "version": "2.0.0",
   "description": "Basic key derivation from mnemonic seed phrase",
-  "scripts": {
-    "dev": "live-server src",
-    "preview": "live-server dist",
-    "build": "node build.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jaonoctus/nip06-web.git"
-  },
   "author": "jaonoctus <jaonoctus@protonmail.com>",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/jaonoctus/nip06-web/issues"
   },
-  "homepage": "https://github.com/jaonoctus/nip06-web#readme",
+  "homepage": "https://github.com/jaonoctus/nip06-web",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "bulma": "1.0.0",
+    "nip06": "1.0.3",
+    "vue": "3.4.21"
+  },
   "devDependencies": {
-    "live-server": "1.2.2"
+    "@vitejs/plugin-vue": "5.0.4",
+    "typescript": "5.2.2",
+    "vite": "5.2.11",
+    "vite-plugin-singlefile": "2.0.1",
+    "vue-tsc": "2.0.6"
   }
 }
