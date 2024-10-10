@@ -18,7 +18,10 @@ const isHexFormat = ref(true)
 
 const combinedMnemonic = computed(() => mnemonicWords.value.map(({ word }) => word.trim().toLowerCase()).join(' ').trim())
 const isFilled = computed(() => combinedMnemonic.value.length > 0)
-const isMnemonicValid = computed(() => validateWords({ mnemonic: combinedMnemonic.value }))
+const isMnemonicValid = computed(() => {
+  const { isMnemonicValid } = validateWords({ mnemonic: combinedMnemonic.value })
+  return isMnemonicValid
+})
 const privateKeyHex = computed(() => {
   if (!isMnemonicValid.value) return ''
   const { privateKey } = privateKeyFromSeedWords({
