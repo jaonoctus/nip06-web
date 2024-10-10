@@ -194,7 +194,7 @@ onMounted(() => {
   <footer class="footer">
     <div class="content has-text-centered">
       <p>
-        <strong>v3.0.0</strong> | made by <a href="https://github.com/jaonoctus/nip06-web" target="_blank" class="has-text-weight-semibold">jaonoctus</a> with <a href="https://vuejs.org" target="_blank">Vue.js</a>, <a href="https://bulma.io" target="_blank">Bulma</a>, <a href="https://github.com/jaonoctus/nip06" target="_blank">nip06</a> and <span class="has-text-danger has-text-weight-semibold">love</span>
+        <strong>v3.0.1</strong> | made by <a href="https://github.com/jaonoctus/nip06-web" target="_blank" class="has-text-weight-semibold">jaonoctus</a> with <a href="https://vuejs.org" target="_blank">Vue.js</a>, <a href="https://bulma.io" target="_blank">Bulma</a>, <a href="https://github.com/jaonoctus/nip06" target="_blank">nip06</a> and <span class="has-text-danger has-text-weight-semibold">love</span>
       </p>
       <p>You can <a href="https://github.com/jaonoctus/nip06-web/releases" target="_blank">download the nip06-standalone.html</a> offline version from the latest GitHub release</p>
     </div>
