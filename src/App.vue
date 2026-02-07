@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   generateSeedWords,
   validateWords,
@@ -8,7 +9,7 @@ import {
   getBech32PrivateKey,
   getBech32PublicKey
 } from 'nip06'
-import { wordlist } from '@scure/bip39/wordlists/english'
+import { wordlist } from '@scure/bip39/wordlists/english.js'
 
 type Mnemonic = { word: string }
 
@@ -122,7 +123,7 @@ function onKeydown(event: KeyboardEvent, index: number) {
   } else if (event.key === 'ArrowUp') {
     event.preventDefault()
     highlightedSuggestion.value = Math.max(highlightedSuggestion.value - 1, -1)
-  } else if (event.key === 'Enter' || event.key === 'Tab') {
+  } else if (event.key === 'Enter') {
     if (highlightedSuggestion.value >= 0) {
       event.preventDefault()
       selectSuggestion(index, suggestions.value[highlightedSuggestion.value])
@@ -147,12 +148,19 @@ function selectSuggestion(index: number, word: string) {
   }
 }
 
-function setWordInputRef(el: any, index: number) {
+function setWordInputRef(el: Element | ComponentPublicInstance | null, index: number) {
   wordInputRefs.value[index] = el as HTMLInputElement | null
 }
 
 onMounted(() => {
   resetForm()
+})
+
+onUnmounted(() => {
+  if (blurTimeout) {
+    clearTimeout(blurTimeout)
+    blurTimeout = null
+  }
 })
 </script>
 
@@ -223,6 +231,10 @@ onMounted(() => {
                         class="input"
                         type="text"
                         autocomplete="off"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        :aria-expanded="activeIndex === index && suggestions.length > 0"
+                        :aria-activedescendant="highlightedSuggestion >= 0 ? `suggestion-${index}-${highlightedSuggestion}` : undefined"
                       />
                       <span class="icon is-small is-left"> {{ index + 1 }} </span>
                     </div>
@@ -231,9 +243,12 @@ onMounted(() => {
                     <div class="dropdown-content">
                       <a
                         v-for="(suggestion, sIndex) in suggestions"
+                        :id="`suggestion-${index}-${sIndex}`"
                         :key="suggestion"
                         class="dropdown-item"
                         :class="{ 'is-active': highlightedSuggestion === sIndex }"
+                        role="option"
+                        :aria-selected="highlightedSuggestion === sIndex"
                         @mousedown.prevent="selectSuggestion(index, suggestion)"
                       >
                         {{ suggestion }}
