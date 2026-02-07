@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import {
   generateSeedWords,
   validateWords,
@@ -8,6 +8,7 @@ import {
   getBech32PrivateKey,
   getBech32PublicKey
 } from 'nip06'
+import { wordlist } from '@scure/bip39/wordlists/english'
 
 type Mnemonic = { word: string }
 
@@ -15,6 +16,10 @@ const mnemonicSize = ref(12)
 const mnemonicWords = ref<Mnemonic[]>([])
 const passphrase = ref('')
 const isHexFormat = ref(true)
+const activeIndex = ref<number | null>(null)
+const highlightedSuggestion = ref(-1)
+const wordInputRefs = ref<(HTMLInputElement | null)[]>([])
+let blurTimeout: ReturnType<typeof setTimeout> | null = null
 
 const combinedMnemonic = computed(() => mnemonicWords.value.map(({ word }) => word.trim().toLowerCase()).join(' ').trim())
 const isFilled = computed(() => combinedMnemonic.value.length > 0)
@@ -85,6 +90,67 @@ function resetForm() {
   passphrase.value = ''
 }
 
+const suggestions = computed(() => {
+  if (activeIndex.value === null) return []
+  const input = mnemonicWords.value[activeIndex.value]?.word.trim().toLowerCase()
+  if (!input || input.length < 1) return []
+  return wordlist.filter(w => w.startsWith(input)).slice(0, 8)
+})
+
+function onFocus(index: number) {
+  if (blurTimeout) {
+    clearTimeout(blurTimeout)
+    blurTimeout = null
+  }
+  activeIndex.value = index
+  highlightedSuggestion.value = -1
+}
+
+function onBlur() {
+  blurTimeout = setTimeout(() => {
+    activeIndex.value = null
+    highlightedSuggestion.value = -1
+  }, 150)
+}
+
+function onKeydown(event: KeyboardEvent, index: number) {
+  if (!suggestions.value.length) return
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    highlightedSuggestion.value = Math.min(highlightedSuggestion.value + 1, suggestions.value.length - 1)
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    highlightedSuggestion.value = Math.max(highlightedSuggestion.value - 1, -1)
+  } else if (event.key === 'Enter' || event.key === 'Tab') {
+    if (highlightedSuggestion.value >= 0) {
+      event.preventDefault()
+      selectSuggestion(index, suggestions.value[highlightedSuggestion.value])
+    } else if (suggestions.value.length === 1) {
+      event.preventDefault()
+      selectSuggestion(index, suggestions.value[0])
+    }
+  } else if (event.key === 'Escape') {
+    activeIndex.value = null
+    highlightedSuggestion.value = -1
+  }
+}
+
+function selectSuggestion(index: number, word: string) {
+  mnemonicWords.value[index] = { word }
+  activeIndex.value = null
+  highlightedSuggestion.value = -1
+  if (index < mnemonicSize.value - 1) {
+    nextTick(() => {
+      wordInputRefs.value[index + 1]?.focus()
+    })
+  }
+}
+
+function setWordInputRef(el: any, index: number) {
+  wordInputRefs.value[index] = el as HTMLInputElement | null
+}
+
 onMounted(() => {
   resetForm()
 })
@@ -140,9 +206,40 @@ onMounted(() => {
                 :key="`word-${index + 1}`"
                 class="field"
               >
-                <div class="control has-icons-left has-icons-right">
-                  <input v-model="mnemonic.word" @paste="onPaste" class="input" type="text" />
-                  <span class="icon is-small is-left"> {{ index + 1 }} </span>
+                <div
+                  class="dropdown"
+                  :class="{ 'is-active': activeIndex === index && suggestions.length > 0 }"
+                  style="width: 100%"
+                >
+                  <div class="dropdown-trigger" style="width: 100%">
+                    <div class="control has-icons-left has-icons-right">
+                      <input
+                        :ref="(el) => setWordInputRef(el, index)"
+                        v-model="mnemonic.word"
+                        @paste="onPaste"
+                        @focus="onFocus(index)"
+                        @blur="onBlur"
+                        @keydown="onKeydown($event, index)"
+                        class="input"
+                        type="text"
+                        autocomplete="off"
+                      />
+                      <span class="icon is-small is-left"> {{ index + 1 }} </span>
+                    </div>
+                  </div>
+                  <div class="dropdown-menu" style="width: 100%" role="listbox">
+                    <div class="dropdown-content">
+                      <a
+                        v-for="(suggestion, sIndex) in suggestions"
+                        :key="suggestion"
+                        class="dropdown-item"
+                        :class="{ 'is-active': highlightedSuggestion === sIndex }"
+                        @mousedown.prevent="selectSuggestion(index, suggestion)"
+                      >
+                        {{ suggestion }}
+                      </a>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="field">
