@@ -16,6 +16,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@scure/bip39": "2.0.1",
     "bulma": "1.0.0",
     "nip06": "1.0.3",
     "vue": "3.4.21"
