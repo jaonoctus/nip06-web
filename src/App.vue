@@ -63,6 +63,16 @@ function fillMnemonic(mnemonic: string) {
   })
 }
 
+function onPaste(event: ClipboardEvent) {
+  const text = event.clipboardData?.getData('text') ?? ''
+  const mnemonic = text.trim().split(/\s+/).join(' ')
+  const { isMnemonicValid } = validateWords({ mnemonic })
+  if (isMnemonicValid) {
+    event.preventDefault()
+    fillMnemonic(mnemonic)
+  }
+}
+
 function toggleFormat() {
   isHexFormat.value = !isHexFormat.value
 }
@@ -131,7 +141,7 @@ onMounted(() => {
                 class="field"
               >
                 <div class="control has-icons-left has-icons-right">
-                  <input v-model="mnemonic.word" class="input" type="text" />
+                  <input v-model="mnemonic.word" @paste="onPaste" class="input" type="text" />
                   <span class="icon is-small is-left"> {{ index + 1 }} </span>
                 </div>
               </div>
