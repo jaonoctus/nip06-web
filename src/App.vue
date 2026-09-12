@@ -182,6 +182,46 @@ function onEntropyPointerLeave() {
   lastTracePoint = { x: -1, y: -1 }
 }
 
+const showPrivateKey = ref(false)
+const copiedField = ref<'private' | 'public' | null>(null)
+let copiedTimeout: ReturnType<typeof setTimeout> | null = null
+
+const displayedPrivateKey = computed(() => (isHexFormat.value ? privateKeyHex.value : privateKeyBech32.value))
+const displayedPublicKey = computed(() => (isHexFormat.value ? publicKeyHex.value : publicKeyBech32.value))
+
+function togglePrivateKeyVisibility() {
+  showPrivateKey.value = !showPrivateKey.value
+}
+
+async function copyToClipboard(value: string, field: 'private' | 'public') {
+  if (!value) return
+  try {
+    await navigator.clipboard.writeText(value)
+  } catch {
+    const helper = document.createElement('textarea')
+    helper.value = value
+    helper.setAttribute('readonly', '')
+    helper.style.position = 'fixed'
+    helper.style.opacity = '0'
+    document.body.appendChild(helper)
+    helper.select()
+    document.execCommand('copy')
+    document.body.removeChild(helper)
+  }
+  copiedField.value = field
+  if (copiedTimeout) clearTimeout(copiedTimeout)
+  copiedTimeout = setTimeout(() => {
+    copiedField.value = null
+  }, 1500)
+}
+
+const wordSet = new Set(wordlist)
+
+function isWordInvalid(word: string) {
+  const normalized = word.trim().toLowerCase()
+  return normalized.length > 0 && !wordSet.has(normalized)
+}
+
 function fillMnemonic(mnemonic: string) {
   mnemonic.split(' ').forEach((word, index) => {
     mnemonicWords.value[index] = { word }
@@ -208,6 +248,7 @@ function resetForm() {
     mnemonicWords.value.push({ word: '' })
   }
   passphrase.value = ''
+  showPrivateKey.value = false
 }
 
 const suggestions = computed(() => {
@@ -280,6 +321,10 @@ onUnmounted(() => {
     clearTimeout(blurTimeout)
     blurTimeout = null
   }
+  if (copiedTimeout) {
+    clearTimeout(copiedTimeout)
+    copiedTimeout = null
+  }
 })
 
 onBeforeUnmount(() => {
@@ -308,37 +353,57 @@ const appVersion = __APP_VERSION__
 
   <div v-if="!warningDismissed" class="modal is-active">
     <div class="modal-background"></div>
-    <div class="modal-content">
-      <article class="message is-warning caution">
-        <div class="message-header">
-          <p>Use with caution</p>
+    <div class="modal-card caution">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Use with caution</p>
+      </header>
+      <section class="modal-card-body">
+        <p class="block">
+          This tool derives Nostr keys from a seed phrase. Anything you type here is as safe as
+          the machine and browser you are using.
+        </p>
+        <div class="content">
+          <ul>
+            <li>
+              <strong>This page runs online.</strong> Your machine, browser, or the page itself
+              could be tampered with. Use it only if you fully trust all of them.
+            </li>
+            <li>
+              <strong>Don't trust, verify.</strong> Review the source code at
+              <a href="https://github.com/jaonoctus/nip06-web" target="_blank">github.com/jaonoctus/nip06-web</a>
+              and confirm what is served to you matches it before entering any seed phrase.
+            </li>
+            <li>
+              <strong>Prefer offline.</strong> Download the
+              <a href="https://github.com/jaonoctus/nip06-web/releases" target="_blank">standalone HTML</a>
+              from the latest release and open it on an air-gapped machine.
+            </li>
+          </ul>
         </div>
-        <div class="message-body">
-          <p>This site runs online in your browser. Your machine, browser, or this page could be tampered with. Use only if you fully trust them; otherwise download the offline version.</p>
-          <p>Don't trust, verify: review the source code at <a href="https://github.com/jaonoctus/nip06-web" target="_blank">github.com/jaonoctus/nip06-web</a> and confirm what is served to you matches it before entering any seed phrase.</p>
 
-          <div class="field mt-5">
-            <label class="label">Type "I UNDERSTAND" to continue</label>
-            <div class="field has-addons">
-              <div class="control is-expanded">
-                <input
-                  v-model="acknowledgeInput"
-                  @keyup.enter="canContinue && (warningDismissed = true)"
-                  class="input is-warning"
-                  type="text"
-                  autocomplete="off"
-                  autofocus
-                />
-              </div>
-              <div class="control">
-                <button :disabled="!canContinue" @click="warningDismissed = true" class="button is-warning">
-                  Continue
-                </button>
-              </div>
-            </div>
+        <div class="field">
+          <label class="label" for="acknowledge">Type <code>I UNDERSTAND</code> to continue</label>
+          <div class="control">
+            <input
+              id="acknowledge"
+              v-model="acknowledgeInput"
+              @keyup.enter="canContinue && (warningDismissed = true)"
+              class="input"
+              :class="canContinue ? 'is-success' : 'is-warning'"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="I UNDERSTAND"
+              autofocus
+            />
           </div>
         </div>
-      </article>
+      </section>
+      <footer class="modal-card-foot is-justify-content-flex-end">
+        <button :disabled="!canContinue" @click="warningDismissed = true" type="button" class="button is-warning">
+          Continue
+        </button>
+      </footer>
     </div>
   </div>
 
@@ -387,21 +452,22 @@ const appVersion = __APP_VERSION__
     </div>
   </div>
 
-  <section class="hero is-fullheight-with-navbar">
-    <div class="hero-body">
-      <div class="container">
-        <div class="columns">
-          <div class="column">
-            <p class="block has-text-centered">
-              You can enter an existing <a href="https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki" target="_blank" class="has-text-link">BIP39 mnemonic</a>, or generate a new random one.
+  <section class="section main-section">
+    <div class="container">
+      <div class="columns is-variable is-5">
+        <div class="column is-half">
+          <div class="box">
+            <h2 class="title is-5 mb-1">Seed phrase</h2>
+            <p class="subtitle is-6 has-text-grey mb-4">
+              Enter an existing <a href="https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki" target="_blank" class="has-text-link">BIP39 mnemonic</a>, paste it into any field, or generate a new random one.
             </p>
-            <form action="">
-              <div class="buttons has-addons is-centered">
+            <form action="" autocomplete="off">
+              <div class="buttons mb-4">
                 <button
                   :disabled="!warningDismissed"
                   @click.prevent="generateRandomMnemonic"
                   type="button"
-                  class="button"
+                  class="button is-link"
                 >
                   generate random mnemonic
                 </button>
@@ -416,103 +482,178 @@ const appVersion = __APP_VERSION__
                 </button>
               </div>
 
-              <div
-                v-for="(mnemonic, index) in mnemonicWords"
-                :key="`word-${index + 1}`"
-                class="field"
-              >
+              <div class="columns is-multiline is-mobile is-variable is-2 word-grid">
                 <div
-                  class="dropdown"
-                  :class="{ 'is-active': activeIndex === index && suggestions.length > 0 }"
-                  style="width: 100%"
+                  v-for="(mnemonic, index) in mnemonicWords"
+                  :key="`word-${index + 1}`"
+                  class="column is-half-mobile is-one-third-tablet"
                 >
-                  <div class="dropdown-trigger" style="width: 100%">
-                    <div class="control has-icons-left has-icons-right">
-                      <input
-                        :ref="(el) => setWordInputRef(el, index)"
-                        v-model="mnemonic.word"
-                        @paste="onPaste"
-                        @focus="onFocus(index)"
-                        @blur="onBlur"
-                        @keydown="onKeydown($event, index)"
-                        class="input"
-                        type="text"
-                        autocomplete="off"
-                        role="combobox"
-                        aria-autocomplete="list"
-                        :aria-expanded="activeIndex === index && suggestions.length > 0"
-                        :aria-activedescendant="highlightedSuggestion >= 0 ? `suggestion-${index}-${highlightedSuggestion}` : undefined"
-                      />
-                      <span class="icon is-small is-left"> {{ index + 1 }} </span>
+                  <div
+                    class="dropdown"
+                    :class="{ 'is-active': activeIndex === index && suggestions.length > 0 }"
+                    style="width: 100%"
+                  >
+                    <div class="dropdown-trigger" style="width: 100%">
+                      <div class="control has-icons-left">
+                        <input
+                          :ref="(el) => setWordInputRef(el, index)"
+                          v-model="mnemonic.word"
+                          @paste="onPaste"
+                          @focus="onFocus(index)"
+                          @blur="onBlur"
+                          @keydown="onKeydown($event, index)"
+                          class="input"
+                          :class="{ 'is-danger': isWordInvalid(mnemonic.word) }"
+                          type="text"
+                          autocomplete="off"
+                          autocapitalize="off"
+                          spellcheck="false"
+                          role="combobox"
+                          aria-autocomplete="list"
+                          :aria-label="`word ${index + 1}`"
+                          :aria-expanded="activeIndex === index && suggestions.length > 0"
+                          :aria-activedescendant="highlightedSuggestion >= 0 ? `suggestion-${index}-${highlightedSuggestion}` : undefined"
+                        />
+                        <span class="icon is-left word-index">{{ index + 1 }}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div class="dropdown-menu" style="width: 100%" role="listbox">
-                    <div class="dropdown-content">
-                      <a
-                        v-for="(suggestion, sIndex) in suggestions"
-                        :id="`suggestion-${index}-${sIndex}`"
-                        :key="suggestion"
-                        class="dropdown-item"
-                        :class="{ 'is-active': highlightedSuggestion === sIndex }"
-                        role="option"
-                        :aria-selected="highlightedSuggestion === sIndex"
-                        @mousedown.prevent="selectSuggestion(index, suggestion)"
-                      >
-                        {{ suggestion }}
-                      </a>
+                    <div class="dropdown-menu" style="width: 100%" role="listbox">
+                      <div class="dropdown-content">
+                        <a
+                          v-for="(suggestion, sIndex) in suggestions"
+                          :id="`suggestion-${index}-${sIndex}`"
+                          :key="suggestion"
+                          class="dropdown-item"
+                          :class="{ 'is-active': highlightedSuggestion === sIndex }"
+                          role="option"
+                          :aria-selected="highlightedSuggestion === sIndex"
+                          @mousedown.prevent="selectSuggestion(index, suggestion)"
+                        >
+                          {{ suggestion }}
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-              <div class="field">
-                <div class="control has-icons-left has-icons-right">
-                  <input v-model="passphrase" class="input" type="text" placeholder="Passphrase" />
+
+              <div class="field mt-4">
+                <label class="label" for="passphrase">Passphrase <span class="has-text-weight-normal has-text-grey">(optional)</span></label>
+                <div class="control">
+                  <input id="passphrase" v-model="passphrase" class="input" type="text" placeholder="Leave empty if you don't use one" autocomplete="off" />
                 </div>
               </div>
             </form>
           </div>
-          <div class="column">
+        </div>
+
+        <div class="column is-half">
+          <div class="box">
+            <h2 class="title is-5 mb-4">Derived keys</h2>
+
             <div v-if="isFilled && isMnemonicValid">
-              <div class="buttons has-addons is-centered">
+              <div class="buttons has-addons mb-4">
                 <button
                   @click.prevent="toggleFormat"
-                  :class="{ 'is-info': isHexFormat }"
-                  class="button"
+                  :class="{ 'is-link is-selected': isHexFormat }"
+                  class="button is-small"
+                  type="button"
                 >
-                  hex format
+                  hex
                 </button>
                 <button
                   @click.prevent="toggleFormat"
-                  :class="{ 'is-info': !isHexFormat }"
-                  class="button"
+                  :class="{ 'is-link is-selected': !isHexFormat }"
+                  class="button is-small"
+                  type="button"
                 >
-                  bech32 format
+                  bech32
                 </button>
               </div>
-              <div v-if="isHexFormat" class="field">
-                <label class="label">hex private key</label>
-                <div class="control">
-                  <input v-model="privateKeyHex" readonly class="input" type="text" />
+              <div class="field">
+                <label class="label">{{ isHexFormat ? 'private key (hex)' : 'private key (nsec)' }}</label>
+                <div class="control has-icons-right has-key-actions">
+                  <input
+                    :value="displayedPrivateKey"
+                    :type="showPrivateKey ? 'text' : 'password'"
+                    readonly
+                    class="input is-family-monospace is-size-7"
+                    aria-label="private key"
+                  />
+                  <span class="icon is-right key-actions">
+                    <button
+                      @click.prevent="togglePrivateKeyVisibility"
+                      type="button"
+                      class="key-action"
+                      :title="showPrivateKey ? 'Hide private key' : 'Show private key'"
+                      :aria-label="showPrivateKey ? 'Hide private key' : 'Show private key'"
+                    >
+                      <svg v-if="showPrivateKey" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </button>
+                    <button
+                      @click.prevent="copyToClipboard(displayedPrivateKey, 'private')"
+                      type="button"
+                      class="key-action"
+                      :class="{ 'is-copied': copiedField === 'private' }"
+                      :title="copiedField === 'private' ? 'Copied' : 'Copy private key'"
+                      aria-label="Copy private key"
+                    >
+                      <svg v-if="copiedField === 'private'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    </button>
+                  </span>
                 </div>
               </div>
-              <div v-if="isHexFormat" class="field">
-                <label class="label">hex public key</label>
-                <div class="control">
-                  <input v-model="publicKeyHex" readonly class="input" type="text" />
+              <div class="field">
+                <label class="label">{{ isHexFormat ? 'public key (hex)' : 'public key (npub)' }}</label>
+                <div class="control has-icons-right has-key-actions is-single">
+                  <input
+                    :value="displayedPublicKey"
+                    readonly
+                    class="input is-family-monospace is-size-7"
+                    type="text"
+                    aria-label="public key"
+                  />
+                  <span class="icon is-right key-actions">
+                    <button
+                      @click.prevent="copyToClipboard(displayedPublicKey, 'public')"
+                      type="button"
+                      class="key-action"
+                      :class="{ 'is-copied': copiedField === 'public' }"
+                      :title="copiedField === 'public' ? 'Copied' : 'Copy public key'"
+                      aria-label="Copy public key"
+                    >
+                      <svg v-if="copiedField === 'public'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    </button>
+                  </span>
                 </div>
               </div>
-              <div v-if="!isHexFormat" class="field">
-                <label class="label">bech32 private key</label>
-                <div class="control">
-                  <input v-model="privateKeyBech32" readonly class="input" type="text" />
-                </div>
-              </div>
-              <div v-if="!isHexFormat" class="field">
-                <label class="label">bech32 public key</label>
-                <div class="control">
-                  <input v-model="publicKeyBech32" readonly class="input" type="text" />
-                </div>
-              </div>
+            </div>
+
+            <div v-else-if="isFilled" class="notification status-note is-invalid mb-0">
+              The seed phrase is not a valid BIP39 mnemonic yet. Check the highlighted words and the checksum.
+            </div>
+
+            <div v-else class="notification status-note mb-0 has-text-grey">
+              Keys will appear here once a valid seed phrase is entered or generated.
             </div>
           </div>
         </div>
@@ -541,16 +682,81 @@ const appVersion = __APP_VERSION__
   touch-action: none;
 }
 
-.caution .message-body .label {
-  color: inherit;
+.word-grid .column {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
 }
 
-.caution .message-body .input {
-  background-color: transparent;
-  color: inherit;
+.control.has-icons-left .word-index {
+  height: 2.5rem;
+  width: 2.5rem;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--bulma-grey-light);
 }
 
-.caution .message-body .input:focus {
-  box-shadow: none;
+.control.has-key-actions .input {
+  padding-right: 4rem;
+}
+
+.control.has-key-actions.is-single .input {
+  padding-right: 2.5rem;
+}
+
+.control.has-icons-right .key-actions {
+  top: 0;
+  bottom: 0;
+  height: auto;
+  width: auto;
+  padding: 0 0.375rem;
+  gap: 0.125rem;
+  pointer-events: auto;
+}
+
+.key-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bulma-input-icon-color);
+  cursor: pointer;
+}
+
+.key-action:hover,
+.key-action:focus-visible {
+  color: var(--bulma-text-strong);
+  background: var(--bulma-background-hover, rgba(255, 255, 255, 0.06));
+  outline: none;
+}
+
+.key-action.is-copied {
+  color: var(--bulma-success);
+}
+
+.key-action svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.status-note {
+  border-left: 3px solid var(--bulma-border);
+}
+
+.status-note.is-invalid {
+  border-left-color: var(--bulma-danger);
+  color: var(--bulma-danger-light);
+}
+
+.caution .modal-card-head {
+  background-color: var(--bulma-warning);
+}
+
+.caution .modal-card-title {
+  color: var(--bulma-warning-invert);
 }
 </style>

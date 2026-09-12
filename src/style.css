@@ -1,0 +1,13 @@
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#app > .section {
+  flex: 1;
+}
+
+#app > .footer {
+  padding: 2rem 1.5rem;
+}
