@@ -13,6 +13,9 @@ import { wordlist } from '@scure/bip39/wordlists/english.js'
 
 type Mnemonic = { word: string }
 
+const warningDismissed = ref(false)
+const acknowledgeInput = ref('')
+const canContinue = computed(() => acknowledgeInput.value.trim().toUpperCase() === 'I UNDERSTAND')
 const mnemonicSize = ref(12)
 const mnemonicWords = ref<Mnemonic[]>([])
 const passphrase = ref('')
@@ -183,6 +186,42 @@ const appVersion = __APP_VERSION__
     </div>
   </nav>
 
+  <div v-if="!warningDismissed" class="modal is-active">
+    <div class="modal-background"></div>
+    <div class="modal-content">
+      <article class="message is-warning caution">
+        <div class="message-header">
+          <p>Use with caution</p>
+        </div>
+        <div class="message-body">
+          <p>This site runs online in your browser. Your machine, browser, or this page could be tampered with. Use only if you fully trust them; otherwise download the offline version.</p>
+          <p>Don't trust, verify: review the source code at <a href="https://github.com/jaonoctus/nip06-web" target="_blank">github.com/jaonoctus/nip06-web</a> and confirm what is served to you matches it before entering any seed phrase.</p>
+
+          <div class="field mt-5">
+            <label class="label">Type "I UNDERSTAND" to continue</label>
+            <div class="field has-addons">
+              <div class="control is-expanded">
+                <input
+                  v-model="acknowledgeInput"
+                  @keyup.enter="canContinue && (warningDismissed = true)"
+                  class="input is-warning"
+                  type="text"
+                  autocomplete="off"
+                  autofocus
+                />
+              </div>
+              <div class="control">
+                <button :disabled="!canContinue" @click="warningDismissed = true" class="button is-warning">
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+
   <section class="hero is-fullheight-with-navbar">
     <div class="hero-body">
       <div class="container">
@@ -324,3 +363,18 @@ const appVersion = __APP_VERSION__
     </div>
   </footer>
 </template>
+
+<style scoped>
+.caution .message-body .label {
+  color: inherit;
+}
+
+.caution .message-body .input {
+  background-color: transparent;
+  color: inherit;
+}
+
+.caution .message-body .input:focus {
+  box-shadow: none;
+}
+</style>
