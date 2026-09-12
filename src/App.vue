@@ -1,14 +1,7 @@
 <script setup lang="ts">
 import type { ComponentPublicInstance } from 'vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue'
-import {
-  generateSeedWords,
-  validateWords,
-  privateKeyFromSeedWords,
-  getPublicKey,
-  getBech32PrivateKey,
-  getBech32PublicKey
-} from 'nip06'
+import { accountFromSeedWords, generateSeedWords, validateWords } from 'nip06'
 import { entropyToMnemonic, mnemonicToEntropy } from '@scure/bip39'
 import { wordlist } from '@scure/bip39/wordlists/english.js'
 
@@ -39,35 +32,19 @@ const isMnemonicValid = computed(() => {
   const { isMnemonicValid } = validateWords({ mnemonic: combinedMnemonic.value })
   return isMnemonicValid
 })
-const privateKeyHex = computed(() => {
-  if (!isMnemonicValid.value) return ''
-  const { privateKey } = privateKeyFromSeedWords({
+type Account = ReturnType<typeof accountFromSeedWords>
+
+const account = computed<Account | null>(() => {
+  if (!isMnemonicValid.value) return null
+  return accountFromSeedWords({
     mnemonic: combinedMnemonic.value,
     passphrase: passphrase.value
   })
-  return privateKey
 })
-const publicKeyHex = computed(() => {
-  if (!isMnemonicValid.value) return ''
-  const { publicKey } = getPublicKey({
-    privateKey: privateKeyHex.value
-  })
-  return publicKey
-})
-const privateKeyBech32 = computed(() => {
-  if (!isMnemonicValid.value) return ''
-  const { bech32PrivateKey } = getBech32PrivateKey({
-    privateKey: privateKeyHex.value
-  })
-  return bech32PrivateKey
-})
-const publicKeyBech32 = computed(() => {
-  if (!isMnemonicValid.value) return ''
-  const { bech32PublicKey } = getBech32PublicKey({
-    publicKey: publicKeyHex.value
-  })
-  return bech32PublicKey
-})
+const privateKeyHex = computed(() => account.value?.privateKey.hex ?? '')
+const publicKeyHex = computed(() => account.value?.publicKey.hex ?? '')
+const privateKeyBech32 = computed(() => account.value?.privateKey.bech32 ?? '')
+const publicKeyBech32 = computed(() => account.value?.publicKey.bech32 ?? '')
 
 // Each pointer sample stores x (uint16), y (uint16) and a float64 high-resolution timestamp.
 const entropyBytesPerSample = 12
