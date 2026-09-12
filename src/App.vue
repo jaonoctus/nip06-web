@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ComponentPublicInstance } from 'vue'
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue'
 import {
   generateSeedWords,
   validateWords,
@@ -9,6 +9,7 @@ import {
   getBech32PrivateKey,
   getBech32PublicKey
 } from 'nip06'
+import { entropyToMnemonic, mnemonicToEntropy } from '@scure/bip39'
 import { wordlist } from '@scure/bip39/wordlists/english.js'
 
 type Mnemonic = { word: string }
@@ -16,6 +17,13 @@ type Mnemonic = { word: string }
 const warningDismissed = ref(false)
 const acknowledgeInput = ref('')
 const canContinue = computed(() => acknowledgeInput.value.trim().toUpperCase() === 'I UNDERSTAND')
+
+const isCollecting = ref(false)
+const entropySamples = ref(0)
+const entropyTargetSamples = 512
+const entropyMinDistance = 4
+const entropyProgress = computed(() => Math.min(entropySamples.value / entropyTargetSamples, 1) * 100)
+const entropyComplete = computed(() => entropySamples.value >= entropyTargetSamples)
 const mnemonicSize = ref(12)
 const mnemonicWords = ref<Mnemonic[]>([])
 const passphrase = ref('')
@@ -61,9 +69,117 @@ const publicKeyBech32 = computed(() => {
   return bech32PublicKey
 })
 
+// Each pointer sample stores x (uint16), y (uint16) and a float64 high-resolution timestamp.
+const entropyBytesPerSample = 12
+const entropyBuffer = new Uint8Array(entropyTargetSamples * entropyBytesPerSample)
+const entropyView = new DataView(entropyBuffer.buffer)
+let lastTracePoint = { x: -1, y: -1 }
+let canvasRef: HTMLCanvasElement | null = null
+
+function openEntropyModal() {
+  entropyBuffer.fill(0)
+  entropySamples.value = 0
+  lastTracePoint = { x: -1, y: -1 }
+  isCollecting.value = true
+  nextTick(() => setupEntropyCanvas())
+}
+
+function closeEntropyModal() {
+  isCollecting.value = false
+  entropyBuffer.fill(0)
+  entropySamples.value = 0
+}
+
 function generateRandomMnemonic() {
-  const { mnemonic } = generateSeedWords()
-  fillMnemonic(mnemonic)
+  if (!warningDismissed.value) return
+  openEntropyModal()
+}
+
+async function completeEntropyCollection() {
+  if (!entropyComplete.value) return
+
+  // Source 1: pointer movement collected on the canvas.
+  const pointerEntropy = entropyBuffer
+  // Source 2: the CSPRNG used by the nip06 package (crypto.getRandomValues).
+  const { mnemonic: packageMnemonic } = generateSeedWords()
+  const packageEntropy = mnemonicToEntropy(packageMnemonic, wordlist)
+
+  const combined = new Uint8Array(pointerEntropy.length + packageEntropy.length)
+  combined.set(pointerEntropy, 0)
+  combined.set(packageEntropy, pointerEntropy.length)
+
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', combined))
+  // 12 words need 128 bits of entropy (words * 4 / 3 bytes).
+  const entropyBytes = (mnemonicSize.value * 4) / 3
+  fillMnemonic(entropyToMnemonic(digest.slice(0, entropyBytes), wordlist))
+  closeEntropyModal()
+}
+
+function setCanvasRef(el: Element | ComponentPublicInstance | null) {
+  canvasRef = el as HTMLCanvasElement | null
+}
+
+function setupEntropyCanvas() {
+  if (!canvasRef) return
+  const rect = canvasRef.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  canvasRef.width = Math.round(rect.width * dpr)
+  canvasRef.height = Math.round(rect.height * dpr)
+  const ctx = canvasRef.getContext('2d')
+  if (!ctx) return
+  ctx.scale(dpr, dpr)
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, rect.width, rect.height)
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'
+  ctx.font = '16px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('draw here', rect.width / 2, rect.height / 2)
+}
+
+function collectEntropy(event: PointerEvent) {
+  if (!isCollecting.value || entropyComplete.value || !canvasRef) return
+  const rect = canvasRef.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  if (x < 0 || y < 0 || x > rect.width || y > rect.height) return
+
+  const dx = x - lastTracePoint.x
+  const dy = y - lastTracePoint.y
+  const hasPrevious = lastTracePoint.x >= 0
+  if (hasPrevious && Math.hypot(dx, dy) < entropyMinDistance) return
+
+  const offset = entropySamples.value * entropyBytesPerSample
+  entropyView.setUint16(offset, Math.round(x * 16) & 0xffff)
+  entropyView.setUint16(offset + 2, Math.round(y * 16) & 0xffff)
+  entropyView.setFloat64(offset + 4, performance.now())
+  entropySamples.value += 1
+
+  const ctx = canvasRef.getContext('2d')
+  if (ctx) {
+    if (entropySamples.value === 1) {
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, rect.width, rect.height)
+    }
+    const hue = 90 + (entropyProgress.value / 100) * 180
+    ctx.strokeStyle = `hsl(${hue}, 100%, 55%)`
+    ctx.lineWidth = 2
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    if (hasPrevious) {
+      ctx.moveTo(lastTracePoint.x, lastTracePoint.y)
+      ctx.lineTo(x, y)
+    } else {
+      ctx.arc(x, y, 1, 0, Math.PI * 2)
+    }
+    ctx.stroke()
+  }
+  lastTracePoint = { x, y }
+}
+
+function onEntropyPointerLeave() {
+  lastTracePoint = { x: -1, y: -1 }
 }
 
 function fillMnemonic(mnemonic: string) {
@@ -166,6 +282,10 @@ onUnmounted(() => {
   }
 })
 
+onBeforeUnmount(() => {
+  canvasRef = null
+})
+
 const appVersion = __APP_VERSION__
 </script>
 
@@ -222,6 +342,51 @@ const appVersion = __APP_VERSION__
     </div>
   </div>
 
+  <div v-if="isCollecting" class="modal is-active">
+    <div class="modal-background" @click="closeEntropyModal"></div>
+    <div class="modal-card">
+      <header class="modal-card-head">
+        <p class="modal-card-title">Generate random mnemonic</p>
+        <button @click="closeEntropyModal" class="delete" aria-label="close" type="button"></button>
+      </header>
+      <section class="modal-card-body">
+        <p class="block">
+          Draw inside the black box with your mouse or finger until the bar fills up.
+        </p>
+        <p class="block">
+          Two independent sources of entropy are used: your pointer movements, and the
+          cryptographic random generator from the <code>nip06</code> package
+          (<code>crypto.getRandomValues</code>). Both are concatenated and hashed with SHA-256
+          to produce the final seed (remember the Coldcard incident? kekw).
+        </p>
+
+        <progress :value="entropyProgress" max="100" class="progress is-success mb-2">{{ entropyProgress.toFixed(0) }}%</progress>
+        <p class="has-text-centered mb-4">
+          <strong>{{ entropyProgress.toFixed(0) }}%</strong>
+          <span class="has-text-grey"> ({{ entropySamples }} / {{ entropyTargetSamples }} samples)</span>
+        </p>
+
+        <canvas
+          :ref="(el) => setCanvasRef(el)"
+          @pointermove="collectEntropy"
+          @pointerleave="onEntropyPointerLeave"
+          class="entropy-canvas"
+        ></canvas>
+      </section>
+      <footer class="modal-card-foot is-justify-content-flex-end">
+        <button @click="closeEntropyModal" type="button" class="button">Cancel</button>
+        <button
+          :disabled="!entropyComplete"
+          @click.prevent="completeEntropyCollection"
+          type="button"
+          class="button is-success"
+        >
+          Generate mnemonic
+        </button>
+      </footer>
+    </div>
+  </div>
+
   <section class="hero is-fullheight-with-navbar">
     <div class="hero-body">
       <div class="container">
@@ -233,6 +398,7 @@ const appVersion = __APP_VERSION__
             <form action="">
               <div class="buttons has-addons is-centered">
                 <button
+                  :disabled="!warningDismissed"
                   @click.prevent="generateRandomMnemonic"
                   type="button"
                   class="button"
@@ -365,6 +531,16 @@ const appVersion = __APP_VERSION__
 </template>
 
 <style scoped>
+.entropy-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-color: #000;
+  border-radius: 4px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
 .caution .message-body .label {
   color: inherit;
 }
